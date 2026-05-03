@@ -72,7 +72,7 @@ function ensureMusicContext() {
   if (!musicEngine.context) {
     musicEngine.context = new AudioCtor();
     musicEngine.master = musicEngine.context.createGain();
-    musicEngine.master.gain.value = 0.16;
+    musicEngine.master.gain.value = 0.32;
     musicEngine.master.connect(musicEngine.context.destination);
   }
   return musicEngine.context;
@@ -103,7 +103,7 @@ function playMusicNoise(start) {
   const noise = ctx.createBufferSource();
   const gain = ctx.createGain();
   noise.buffer = buffer;
-  gain.gain.setValueAtTime(0.035, start);
+  gain.gain.setValueAtTime(0.06, start);
   gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.045);
   noise.connect(gain);
   gain.connect(musicEngine.master);
@@ -117,9 +117,9 @@ function scheduleMusicStep() {
   const step = musicEngine.step % 32;
   const bass = [55, 55, 82.41, 55, 73.42, 55, 98, 55, 65.41, 65.41, 98, 65.41, 87.31, 65.41, 110, 65.41, 55, 55, 82.41, 55, 73.42, 55, 98, 55, 49, 49, 73.42, 49, 65.41, 49, 87.31, 49];
   const lead = [440, 554.37, 659.25, 830.61, 659.25, 554.37, 493.88, 659.25];
-  playMusicTone(bass[step], now, 0.22, 'sawtooth', 0.11);
-  playMusicTone(lead[step % lead.length], now, 0.12, 'square', 0.045);
-  if (step % 4 === 0) playMusicTone(72, now, 0.16, 'sine', 0.16);
+  playMusicTone(bass[step], now, 0.24, 'sawtooth', 0.18);
+  playMusicTone(lead[step % lead.length], now, 0.14, 'square', 0.08);
+  if (step % 4 === 0) playMusicTone(72, now, 0.18, 'sine', 0.24);
   if (step % 2 === 1) playMusicNoise(now);
   musicEngine.step += 1;
 }
