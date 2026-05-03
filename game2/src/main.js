@@ -305,15 +305,15 @@ function update(dt, now) {
   state.bgY = (state.bgY + dt * (45 + state.level * 6)) % H;
   state.level = Math.min(12, 1 + Math.floor(state.score / 450));
 
-  const speed = 330;
+  const speed = 390;
   let dx = 0;
   let dy = 0;
   if (keys.has('ArrowLeft') || keys.has('KeyA')) dx -= 1;
   if (keys.has('ArrowRight') || keys.has('KeyD')) dx += 1;
   if (keys.has('ArrowUp') || keys.has('KeyW')) dy -= 1;
   if (keys.has('ArrowDown') || keys.has('KeyS')) dy += 1;
-  if (motionControl.enabled && motionControl.confidence > 0.18) {
-    dx += motionControl.direction * 1.25;
+  if (motionControl.enabled && motionControl.confidence > 0.1) {
+    dx += motionControl.direction * 1.9;
   }
   if (pointer.active) {
     state.player.x += (pointer.x - state.player.x) * Math.min(1, dt * 12);
@@ -642,11 +642,11 @@ async function analyzeMotionFrame(now) {
         }
       } else {
         const delta = head.x - motionControl.baseline;
-        const deadZone = 0.045;
-        const raw = Math.abs(delta) < deadZone ? 0 : Math.max(-1, Math.min(1, delta / 0.22));
-        motionControl.direction = motionControl.direction * 0.72 + raw * 0.28;
+        const deadZone = 0.022;
+        const raw = Math.abs(delta) < deadZone ? 0 : Math.max(-1, Math.min(1, delta / 0.12));
+        motionControl.direction = motionControl.direction * 0.58 + raw * 0.42;
         motionControl.confidence = head.confidence;
-        if (Math.abs(raw) > 0.18) {
+        if (Math.abs(raw) > 0.1) {
           setMotionStatus(raw < 0 ? '检测到头部向左，战机左移。' : '检测到头部向右，战机右移。');
         }
       }
