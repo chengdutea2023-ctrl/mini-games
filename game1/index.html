@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>霓虹空袭</title>
+    <link rel="stylesheet" href="./src/styles.css" />
+  </head>
+  <body>
+    <div class="city-backdrop" aria-hidden="true">
+      <div class="city-glow"></div>
+      <div class="skyline skyline-back"></div>
+      <div class="skyline skyline-front"></div>
+    </div>
+    <main class="game-shell">
+      <section class="game-panel" aria-label="霓虹空袭游戏区域">
+        <div class="panel-chrome" aria-hidden="true"></div>
+        <canvas id="game" width="560" height="840"></canvas>
+        <div class="scanlines" aria-hidden="true"></div>
+        <div class="hud" aria-live="polite">
+          <span class="hud-item">分数 <strong id="score">0</strong></span>
+          <span class="hud-item">生命 <strong id="lives">3</strong></span>
+          <span class="hud-item">等级 <strong id="level">1</strong></span>
+          <button id="musicButton" class="hud-button" type="button" aria-pressed="false">音乐开</button>
+        </div>
+        <div id="overlay" class="overlay">
+          <div class="overlay-panel">
+            <span class="eyebrow">赛博城市防线</span>
+            <h1>霓虹空袭</h1>
+            <p id="overlayText">方向键或 W/A/S/D 移动，空格射击，P 暂停</p>
+            <button id="startButton" type="button">启动战机</button>
+          </div>
+        </div>
+      </section>
+      <aside class="side-panel">
+        <span class="eyebrow">任务数据</span>
+        <h2>城市防线</h2>
+        <p>拦截从高空入侵的敌机，躲避粉色能量弹，保护霓虹城区。</p>
+        <div class="data-grid">
+          <span>移动</span><strong>方向键 / W/A/S/D</strong>
+          <span>射击</span><strong>空格 / 按住屏幕</strong>
+          <span>暂停</span><strong>P 键</strong>
+        </div>
+      </aside>
+    </main>
+    <script src="./src/main.js"></script>
+  </body>
+</html>
