@@ -28,6 +28,7 @@ const motionControl = {
   baseline: null,
   samples: [],
   direction: 0,
+  targetX: null,
   confidence: 0,
   lastFrame: 0,
   raf: null
@@ -312,12 +313,13 @@ function update(dt, now) {
   if (keys.has('ArrowRight') || keys.has('KeyD')) dx += 1;
   if (keys.has('ArrowUp') || keys.has('KeyW')) dy -= 1;
   if (keys.has('ArrowDown') || keys.has('KeyS')) dy += 1;
-  if (motionControl.enabled && motionControl.confidence > 0.1) {
-    dx += motionControl.direction * 1.9;
-  }
+  const motionActive = motionControl.enabled && motionControl.confidence > 0.1 && motionControl.targetX !== null && Math.abs(motionControl.direction) > 0.02;
   if (pointer.active) {
     state.player.x += (pointer.x - state.player.x) * Math.min(1, dt * 12);
     state.player.y += (pointer.y - state.player.y) * Math.min(1, dt * 12);
+  } else if (motionActive) {
+    state.player.x += (motionControl.targetX - state.player.x) * Math.min(1, dt * 12);
+    if (dy) state.player.y += dy * speed * dt;
   } else if (dx || dy) {
     const len = Math.hypot(dx, dy) || 1;
     state.player.x += (dx / len) * speed * dt;
@@ -539,6 +541,7 @@ function calibrateMotion() {
   motionControl.baseline = null;
   motionControl.samples = [];
   motionControl.direction = 0;
+  motionControl.targetX = null;
   motionControl.confidence = 0;
   setMotionStatus('请正对摄像头保持 1 秒，正在校准中心位置。');
 }
@@ -643,8 +646,10 @@ async function analyzeMotionFrame(now) {
       } else {
         const delta = head.x - motionControl.baseline;
         const deadZone = 0.022;
-        const raw = Math.abs(delta) < deadZone ? 0 : Math.max(-1, Math.min(1, delta / 0.12));
-        motionControl.direction = motionControl.direction * 0.58 + raw * 0.42;
+        const raw = Math.abs(delta) < deadZone ? 0 : Math.max(-1, Math.min(1, delta / 0.1));
+        const balancedRaw = raw < 0 ? raw * 1.28 : raw;
+        motionControl.direction = motionControl.direction * 0.5 + balancedRaw * 0.5;
+        motionControl.targetX = Math.max(40, Math.min(W - 40, W / 2 + motionControl.direction * W * 0.48));
         motionControl.confidence = head.confidence;
         if (Math.abs(raw) > 0.1) {
           setMotionStatus(raw < 0 ? '检测到头部向左，战机左移。' : '检测到头部向右，战机右移。');
@@ -652,6 +657,7 @@ async function analyzeMotionFrame(now) {
       }
     } else if (motionControl.baseline !== null) {
       motionControl.direction *= 0.82;
+      motionControl.targetX = null;
       motionControl.confidence = 0;
       setMotionStatus('暂时没有识别到头部，请保持脸部在摄像头画面内。');
     }
