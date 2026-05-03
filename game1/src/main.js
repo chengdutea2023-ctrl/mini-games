@@ -15,6 +15,7 @@ const images = {};
 const sounds = {};
 const pointer = { active: false, shooting: false, x: W / 2, y: H - 90 };
 const audioState = { musicMuted: false, musicReady: false };
+const musicEngine = { context: null, master: null, timer: null, step: 0, playing: false };
 
 const state = {
   mode: 'ready',
@@ -65,20 +66,87 @@ function updateMusicButton() {
   musicButton.setAttribute('aria-pressed', String(!audioState.musicMuted));
 }
 
+function ensureMusicContext() {
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtor) return null;
+  if (!musicEngine.context) {
+    musicEngine.context = new AudioCtor();
+    musicEngine.master = musicEngine.context.createGain();
+    musicEngine.master.gain.value = 0.16;
+    musicEngine.master.connect(musicEngine.context.destination);
+  }
+  return musicEngine.context;
+}
+
+function playMusicTone(freq, start, duration, type, gainValue) {
+  const ctx = musicEngine.context;
+  if (!ctx || !musicEngine.master) return;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, start);
+  gain.gain.setValueAtTime(0.0001, start);
+  gain.gain.exponentialRampToValueAtTime(gainValue, start + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+  osc.connect(gain);
+  gain.connect(musicEngine.master);
+  osc.start(start);
+  osc.stop(start + duration + 0.03);
+}
+
+function playMusicNoise(start) {
+  const ctx = musicEngine.context;
+  if (!ctx || !musicEngine.master) return;
+  const buffer = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 0.045), ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  const noise = ctx.createBufferSource();
+  const gain = ctx.createGain();
+  noise.buffer = buffer;
+  gain.gain.setValueAtTime(0.035, start);
+  gain.gain.exponentialRampToValueAtTime(0.0001, start + 0.045);
+  noise.connect(gain);
+  gain.connect(musicEngine.master);
+  noise.start(start);
+}
+
+function scheduleMusicStep() {
+  const ctx = musicEngine.context;
+  if (!ctx || !musicEngine.playing) return;
+  const now = ctx.currentTime;
+  const step = musicEngine.step % 32;
+  const bass = [55, 55, 82.41, 55, 73.42, 55, 98, 55, 65.41, 65.41, 98, 65.41, 87.31, 65.41, 110, 65.41, 55, 55, 82.41, 55, 73.42, 55, 98, 55, 49, 49, 73.42, 49, 65.41, 49, 87.31, 49];
+  const lead = [440, 554.37, 659.25, 830.61, 659.25, 554.37, 493.88, 659.25];
+  playMusicTone(bass[step], now, 0.22, 'sawtooth', 0.11);
+  playMusicTone(lead[step % lead.length], now, 0.12, 'square', 0.045);
+  if (step % 4 === 0) playMusicTone(72, now, 0.16, 'sine', 0.16);
+  if (step % 2 === 1) playMusicNoise(now);
+  musicEngine.step += 1;
+}
+
 function startMusic() {
-  const music = sounds.bgm;
-  if (!music || audioState.musicMuted) return;
-  music.volume = 0.28;
-  music.play().then(() => { audioState.musicReady = true; }).catch(() => {});
+  if (audioState.musicMuted || musicEngine.playing) return;
+  const ctx = ensureMusicContext();
+  if (!ctx) return;
+  ctx.resume().then(() => {
+    if (audioState.musicMuted || musicEngine.playing) return;
+    musicEngine.playing = true;
+    audioState.musicReady = true;
+    scheduleMusicStep();
+    musicEngine.timer = window.setInterval(scheduleMusicStep, 125);
+  }).catch(() => {});
 }
 
 function pauseMusic() {
-  if (sounds.bgm) sounds.bgm.pause();
+  musicEngine.playing = false;
+  if (musicEngine.timer) {
+    window.clearInterval(musicEngine.timer);
+    musicEngine.timer = null;
+  }
 }
 
 function toggleMusic() {
   audioState.musicMuted = !audioState.musicMuted;
-  if (sounds.bgm) sounds.bgm.muted = audioState.musicMuted;
   if (audioState.musicMuted) pauseMusic();
   else if (state.mode === 'playing') startMusic();
   updateMusicButton();
@@ -453,7 +521,6 @@ async function boot() {
   loadSound('explode', './assets/audio/explode.wav');
   loadSound('hit', './assets/audio/hit.wav');
   loadSound('start', './assets/audio/start.wav');
-  loadSound('bgm', './assets/audio/bgm-loop.wav', { loop: true, volume: 0.28 });
   updateMusicButton();
   draw();
   requestAnimationFrame(loop);
