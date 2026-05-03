@@ -7,6 +7,10 @@ const overlay = document.getElementById('overlay');
 const overlayText = document.getElementById('overlayText');
 const startButton = document.getElementById('startButton');
 const musicButton = document.getElementById('musicButton');
+const motionButton = document.getElementById('motionButton');
+const calibrateButton = document.getElementById('calibrateButton');
+const motionStatus = document.getElementById('motionStatus');
+const motionVideo = document.getElementById('motionVideo');
 
 const W = canvas.width;
 const H = canvas.height;
@@ -15,6 +19,19 @@ const images = {};
 const sounds = {};
 const pointer = { active: false, shooting: false, x: W / 2, y: H - 90 };
 const audioState = { musicMuted: false, musicReady: false };
+const motionControl = {
+  enabled: false,
+  stream: null,
+  detector: null,
+  canvas: document.createElement('canvas'),
+  context: null,
+  baseline: null,
+  samples: [],
+  direction: 0,
+  confidence: 0,
+  lastFrame: 0,
+  raf: null
+};
 const musicEngine = { context: null, master: null, timer: null, step: 0, playing: false };
 
 const state = {
@@ -182,6 +199,7 @@ function resetGame() {
   overlay.classList.add('hidden');
   startButton.textContent = '重新启动';
   startMusic();
+  if (motionControl.enabled) calibrateMotion();
   playSound('start');
   updateHud();
 }
@@ -294,6 +312,9 @@ function update(dt, now) {
   if (keys.has('ArrowRight') || keys.has('KeyD')) dx += 1;
   if (keys.has('ArrowUp') || keys.has('KeyW')) dy -= 1;
   if (keys.has('ArrowDown') || keys.has('KeyS')) dy += 1;
+  if (motionControl.enabled && motionControl.confidence > 0.18) {
+    dx += motionControl.direction * 1.25;
+  }
   if (pointer.active) {
     state.player.x += (pointer.x - state.player.x) * Math.min(1, dt * 12);
     state.player.y += (pointer.y - state.player.y) * Math.min(1, dt * 12);
@@ -306,7 +327,7 @@ function update(dt, now) {
   state.player.y = Math.max(68, Math.min(H - 42, state.player.y));
   state.player.invincible = Math.max(0, state.player.invincible - dt * 1000);
 
-  if (keys.has('Space') || pointer.shooting) shoot(now);
+  shoot(now);
   spawnEnemy(now);
   spawnEnemyBullet(now);
 
@@ -449,7 +470,7 @@ function togglePause() {
     state.mode = 'paused';
     overlay.classList.remove('hidden');
     overlay.querySelector('h1').textContent = '系统暂停';
-    overlayText.textContent = '按 P 继续，或点击按钮重新启动。粉色弹幕命中才会扣生命。';
+    overlayText.textContent = '按 P 继续，或点击按钮重新启动。体感控制开启后，头向左/右会控制飞机横向移动。';
     pauseMusic();
   } else if (state.mode === 'paused') {
     state.mode = 'playing';
@@ -504,6 +525,149 @@ startButton.addEventListener('click', () => {
 musicButton.addEventListener('click', (event) => {
   event.stopPropagation();
   toggleMusic();
+});
+
+function setMotionStatus(text) {
+  if (motionStatus) motionStatus.textContent = text;
+}
+
+function isCameraAllowedContext() {
+  return window.isSecureContext || ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+}
+
+function calibrateMotion() {
+  motionControl.baseline = null;
+  motionControl.samples = [];
+  motionControl.direction = 0;
+  motionControl.confidence = 0;
+  setMotionStatus('请正对摄像头保持 1 秒，正在校准中心位置。');
+}
+
+function updateMotionButton() {
+  if (motionButton) motionButton.textContent = motionControl.enabled ? '体感运行中' : '开启体感';
+}
+
+async function startMotionControl() {
+  if (motionControl.enabled) {
+    calibrateMotion();
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setMotionStatus('当前浏览器不支持摄像头体感控制。');
+    return;
+  }
+  if (!isCameraAllowedContext()) {
+    setMotionStatus('当前页面不是 HTTPS，浏览器会禁止摄像头。请用 HTTPS 线上地址，或在 localhost 本地运行。');
+    return;
+  }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } },
+      audio: false
+    });
+    motionControl.stream = stream;
+    motionControl.enabled = true;
+    motionControl.context = motionControl.canvas.getContext('2d', { willReadFrequently: true });
+    motionControl.canvas.width = 160;
+    motionControl.canvas.height = 120;
+    if ('FaceDetector' in window) {
+      motionControl.detector = new window.FaceDetector({ fastMode: true, maxDetectedFaces: 1 });
+    }
+    motionVideo.srcObject = stream;
+    await motionVideo.play();
+    updateMotionButton();
+    calibrateMotion();
+    analyzeMotionFrame(performance.now());
+  } catch (error) {
+    motionControl.enabled = false;
+    updateMotionButton();
+    setMotionStatus('摄像头启动失败：' + (error.message || '请检查浏览器权限'));
+  }
+}
+
+function sampleMotionCentroid() {
+  if (!motionVideo.videoWidth || !motionControl.context) return null;
+  const ctx2 = motionControl.context;
+  const w = motionControl.canvas.width;
+  const h = motionControl.canvas.height;
+  ctx2.drawImage(motionVideo, 0, 0, w, h);
+  const pixels = ctx2.getImageData(0, 0, w, h).data;
+  let total = 0;
+  let weightedX = 0;
+  for (let y = 10; y < h - 8; y += 2) {
+    for (let x = 8; x < w - 8; x += 2) {
+      const i = (y * w + x) * 4;
+      const r = pixels[i];
+      const g = pixels[i + 1];
+      const b = pixels[i + 2];
+      const brightness = (r + g + b) / 3;
+      const skinHint = r > 55 && g > 35 && b > 25 && r > b * 1.05 && r < 245;
+      const weight = skinHint ? Math.max(0, brightness - 35) : Math.max(0, brightness - 130) * 0.35;
+      if (weight > 0) {
+        total += weight;
+        weightedX += x * weight;
+      }
+    }
+  }
+  if (total < 900) return null;
+  return { x: weightedX / total / w, confidence: Math.min(1, total / 26000) };
+}
+
+async function detectHeadPosition() {
+  if (motionControl.detector) {
+    try {
+      const faces = await motionControl.detector.detect(motionVideo);
+      if (faces.length > 0) {
+        const box = faces[0].boundingBox;
+        return { x: (box.x + box.width / 2) / motionVideo.videoWidth, confidence: Math.min(1, box.width / motionVideo.videoWidth) };
+      }
+    } catch {
+      motionControl.detector = null;
+    }
+  }
+  return sampleMotionCentroid();
+}
+
+async function analyzeMotionFrame(now) {
+  if (!motionControl.enabled) return;
+  if (now - motionControl.lastFrame > 85) {
+    motionControl.lastFrame = now;
+    const head = await detectHeadPosition();
+    if (head) {
+      if (motionControl.baseline === null) {
+        motionControl.samples.push(head.x);
+        if (motionControl.samples.length >= 10) {
+          motionControl.baseline = motionControl.samples.reduce((sum, value) => sum + value, 0) / motionControl.samples.length;
+          setMotionStatus('体感已启用：头向左/右移动，飞机会跟随横向移动。');
+        }
+      } else {
+        const delta = head.x - motionControl.baseline;
+        const deadZone = 0.045;
+        const raw = Math.abs(delta) < deadZone ? 0 : Math.max(-1, Math.min(1, delta / 0.22));
+        motionControl.direction = motionControl.direction * 0.72 + raw * 0.28;
+        motionControl.confidence = head.confidence;
+        if (Math.abs(raw) > 0.18) {
+          setMotionStatus(raw < 0 ? '检测到头部向左，战机左移。' : '检测到头部向右，战机右移。');
+        }
+      }
+    } else if (motionControl.baseline !== null) {
+      motionControl.direction *= 0.82;
+      motionControl.confidence = 0;
+      setMotionStatus('暂时没有识别到头部，请保持脸部在摄像头画面内。');
+    }
+  }
+  motionControl.raf = requestAnimationFrame(analyzeMotionFrame);
+}
+
+motionButton.addEventListener('click', (event) => {
+  event.stopPropagation();
+  startMotionControl();
+});
+
+calibrateButton.addEventListener('click', (event) => {
+  event.stopPropagation();
+  if (motionControl.enabled) calibrateMotion();
+  else setMotionStatus('请先开启体感控制。');
 });
 
 async function boot() {

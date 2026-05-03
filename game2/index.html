@@ -27,7 +27,7 @@
           <div class="overlay-panel">
             <span class="eyebrow">赛博城市防线</span>
             <h1>霓虹空袭体感控制版</h1>
-            <p id="overlayText">方向键或 W/A/S/D 移动，空格射击，P 暂停；后续可接入体感控制</p>
+            <p id="overlayText">自动射击；头向左/右控制横向移动，方向键或 W/A/S/D 也可操作，P 暂停</p>
             <button id="startButton" type="button">启动战机</button>
           </div>
         </div>
@@ -35,11 +35,20 @@
       <aside class="side-panel">
         <span class="eyebrow">任务数据</span>
         <h2>城市防线</h2>
-        <p>拦截从高空入侵的敌机，躲避粉色能量弹，保护霓虹城区。</p>
+        <p>自动发射火力，使用头部左右移动控制战机横向机动，躲避粉色能量弹。</p>
         <div class="data-grid">
           <span>移动</span><strong>方向键 / W/A/S/D</strong>
-          <span>射击</span><strong>空格 / 按住屏幕</strong>
+          <span>射击</span><strong>自动开火</strong>
           <span>暂停</span><strong>P 键</strong>
+          <span>体感</span><strong>摄像头识别头部左右</strong>
+        </div>
+        <div class="motion-panel">
+          <video id="motionVideo" class="motion-video" autoplay playsinline muted></video>
+          <div class="motion-actions">
+            <button id="motionButton" type="button">开启体感</button>
+            <button id="calibrateButton" type="button">校准</button>
+          </div>
+          <p id="motionStatus">体感控制需要摄像头权限；公网访问需要 HTTPS。</p>
         </div>
       </aside>
     </main>
